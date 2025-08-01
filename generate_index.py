@@ -11,6 +11,8 @@ from typing import List, Dict
 # --- Configuration ---
 # Max number of charts to build from source in a single run to prevent timeouts.
 MAX_SOURCE_BUILDS = 50
+# Max number of downloads from OCI that are permitted. (The rest will eventually top up due to --merge.)
+MAX_OCI_PULLS = 50
 
 def find_chart_directories(root_path: str) -> List[str]:
     """Finds all directories containing a Chart.yaml file."""
@@ -184,6 +186,7 @@ def create_helm_index(repo_path: str, repo_url: str):
     # --- Step 3: Process all charts ---
     total_charts = len(all_chart_dirs)
     source_build_count = 0
+    oci_pull_count = 0
     print(f"\n--- 3. Processing {total_charts} total charts ---")
     for i, chart_dir in enumerate(all_chart_dirs, 1):
         info = get_chart_info(chart_dir)
@@ -227,12 +230,19 @@ def create_helm_index(repo_path: str, repo_url: str):
         # Strategy 2: Pull from OCI registry
         print(f"   - Not in remote index. Trying to pull from oci://quay.io/truecharts/{chart_name}...")
         oci_pull_command = ["helm", "pull", f"oci://quay.io/truecharts/{chart_name}", "--version", chart_version, "--destination", package_dir]
+        if oci_pull_count >= MAX_OCI_PULLS:
+            print(f" -> SKIPPING pull from oci: Pull limit of {MAX_OCI_PULLS} reached.")
+            print(f"    (Also skips build from source)")
+            # We could likely break here too, but eh. Let's print out the names of remaining ones, or use tarballs we do have.
+            continue
+        
+        oci_pull_count += 1
         if run_command(oci_pull_command, suppress_error=True, suppress_output=True):
             print(f"   -> SUCCESS: Pulled from OCI.")
             if not os.path.exists(package_path):
-                 print(f"   -> WARNING: Helm pull reported success, but package not found. Building from source.")
+                print(f"   -> WARNING: Helm pull reported success, but package not found. Building from source.")
             else:
-                 continue
+                continue
         else:
             print(f"   - OCI pull failed. Will build from source.")
 
