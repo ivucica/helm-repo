@@ -79,6 +79,7 @@ def validate_index(package_dir: str):
         print(f" - Adding temporary repo '{repo_name}' for validation...")
         if not run_command(["helm", "repo", "add", repo_name, repo_url]):
             print("\nFATAL: Failed to add local directory as a Helm repo for validation.")
+            run_command(["cat", package_dir+"/index.yaml"], suppress_output=False)
             # TODO: make use of 'finally'
             httpd.shutdown()
             httpd.server_close()
@@ -88,6 +89,7 @@ def validate_index(package_dir: str):
         print(" - Searching repo to test index integrity...")
         if not run_command(["helm", "search", "repo", repo_name], suppress_output=True):
             print("\nFATAL: Helm failed to read the generated index.yaml. It is likely malformed.")
+            run_command(["cat", package_dir+"/index.yaml"], supprtess_output=False)
             # TODO: make use of 'finally'
             run_command(["helm", "repo", "remove", repo_name], suppress_output=True) # Clean up
             httpd.shutdown()
