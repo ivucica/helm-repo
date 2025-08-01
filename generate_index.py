@@ -16,7 +16,7 @@ from typing import List, Dict
 # Max number of charts to build from source in a single run to prevent timeouts.
 MAX_SOURCE_BUILDS = 50
 # Max number of downloads from OCI that are permitted. (The rest will eventually top up due to --merge.)
-MAX_OCI_PULLS = 50
+MAX_OCI_PULLS = 800
 
 def find_chart_directories(root_path: str) -> List[str]:
     """Finds all directories containing a Chart.yaml file."""
