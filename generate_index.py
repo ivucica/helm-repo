@@ -85,7 +85,8 @@ def create_helm_index(repo_path: str, repo_url: str):
                 with open(index_path, 'wb') as f:
                     f.write(response.content)
                 
-                remote_index = yaml.safe_load(response.text)
+                remote_index_text = response.content.decode('utf-8', errors='ignore')
+                remote_index = yaml.safe_load(remote_index_text)
                 if remote_index and 'entries' in remote_index:
                     existing_index = remote_index.get("entries", {})
                 print(f"Found {len(existing_index)} unique charts in the remote index.")
