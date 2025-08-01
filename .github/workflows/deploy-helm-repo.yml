@@ -52,6 +52,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyyaml requests
 
+      - name: Cache Helm chart packages
+        id: cache-charts
+        uses: actions/cache@v4
+        with:
+          path: ./truecharts-repo/helm-repo
+          key: ${{ runner.os }}-helm-charts-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-helm-charts-
+
       - name: Clone TrueCharts Repository
         uses: actions/checkout@v4
         with:
