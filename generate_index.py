@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# run inside of the cloned repo
+# run inside of the cloned repo.
 
 import os
 import subprocess
@@ -12,10 +12,9 @@ def find_chart_directories(root_path: str) -> List[str]:
     if not os.path.isdir(root_path):
         print(f"Warning: Directory not found, skipping: {root_path}")
         return []
-        
+
     for dirpath, _, filenames in os.walk(root_path):
         if "Chart.yaml" in filenames:
-            # The 'common' chart is a library and should not be packaged as a standalone chart.
             if os.path.basename(dirpath) == 'common' and 'library' in dirpath:
                 print(f"Skipping library chart: {dirpath}")
                 continue
@@ -32,7 +31,9 @@ def run_command(command: list) -> None:
             check=True
         )
         if process.stdout:
-            print(process.stdout)
+            # Suppress noisy output from helm dependency build for cleaner logs
+            if "dependency build" not in " ".join(command):
+                 print(process.stdout)
     except FileNotFoundError:
         print(f"Error: The command '{command[0]}' was not found.")
         print("Please ensure the Helm CLI is installed and in your system's PATH.")
@@ -40,7 +41,6 @@ def run_command(command: list) -> None:
     except subprocess.CalledProcessError as e:
         print(f"Error executing command: {' '.join(command)}")
         print(f"Stderr: {e.stderr}")
-        # Continue execution even if one chart fails to package
         raise
 
 def create_helm_index(repo_path: str, repo_url: str):
@@ -53,10 +53,9 @@ def create_helm_index(repo_path: str, repo_url: str):
     os.makedirs(package_dir, exist_ok=True)
     print(f"Chart packages will be placed in: {package_dir}\\n")
 
-    # Directories to scan for charts, as requested
     chart_subdirs = ["stable", "premium", "incubator", "system", "library"]
     all_chart_dirs = []
-    
+
     print("--- 1. Scanning for charts ---")
     for subdir in chart_subdirs:
         path = os.path.join(charts_root, subdir)
@@ -70,13 +69,26 @@ def create_helm_index(repo_path: str, repo_url: str):
 
     print(f"\\n--- 2. Packaging {len(all_chart_dirs)} total charts ---")
     for chart_dir in all_chart_dirs:
-        print(f"  - Packaging: {os.path.basename(chart_dir)}")
+        chart_name = os.path.basename(chart_dir)
+        print(f" - Processing: {chart_name}")
         try:
+            # ==================================================================
+            # ===                MODIFICATION IS HERE                        ===
+            # ==================================================================
+            # Step 1: Build dependencies before packaging. This command will
+            # download required charts (like 'common') into the chart's
+            # 'charts' subdirectory.
+            print(f"   - Building dependencies for {chart_name}...")
+            run_command(["helm", "dependency", "build", chart_dir])
+
+            # Step 2: Package the chart with its dependencies.
+            print(f"   - Packaging {chart_name}...")
             run_command(["helm", "package", chart_dir, "--destination", package_dir])
+
         except subprocess.CalledProcessError:
-            print(f"  -> FAILED to package: {os.path.basename(chart_dir)}")
+            print(f" -> FAILED to process chart: {chart_name}")
             continue
-    
+
     print(f"\\n--- 3. Generating index.yaml ---")
     print(f"Indexing packages in '{package_dir}' with URL '{repo_url}'")
     try:
@@ -86,7 +98,7 @@ def create_helm_index(repo_path: str, repo_url: str):
     except subprocess.CalledProcessError:
         print("Failed to generate index.yaml. Please check the errors above.")
         return
-    
+
     print("\\n--- Repository Ready ---")
     print(f"1. Upload the entire '{os.path.basename(package_dir)}' directory to a web server.")
     print(f"2. The server must make the files available at the URL you provided: {repo_url}")
@@ -94,6 +106,21 @@ def create_helm_index(repo_path: str, repo_url: str):
     print(f"   helm repo add my-charts {repo_url}")
     print("   helm repo update")
     print("--------------------------")
+
+
+if __name__ == "__main__":
+    # --- Configuration ---
+    # The absolute URL where your packaged charts will be hosted.
+    # IMPORTANT: You MUST change this to your own URL or set the env var.
+    REPO_HOST_URL = os.getenv("REPO_HOST_URL", "https://your-server.com/path-to-charts")
+
+    # The local path to the cloned repository.
+    # This script assumes it is located in the root of the repository.
+    REPO_LOCAL_PATH = os.getenv("REPO_LOCAL_PATH", ".")
+
+    create_helm_index(REPO_LOCAL_PATH, REPO_HOST_URL)
+
+
 
 
 if __name__ == "__main__":
