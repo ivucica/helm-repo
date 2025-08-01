@@ -104,8 +104,9 @@ def create_helm_index(repo_path: str, repo_url: str):
         return
 
     # --- Step 3: Process all charts ---
-    print(f"\n--- 3. Processing {len(all_chart_dirs)} total charts ---")
-    for chart_dir in all_chart_dirs:
+    total_charts = len(all_chart_dirs)
+    print(f"\n--- 3. Processing {total_charts} total charts ---")
+    for i, chart_dir in enumerate(all_chart_dirs, 1):
         info = get_chart_info(chart_dir)
         if not info or not info.get("name") or not info.get("version"):
             print(f" -> Skipping directory {chart_dir} due to missing chart info.")
@@ -118,7 +119,8 @@ def create_helm_index(repo_path: str, repo_url: str):
         if os.path.exists(package_path):
             continue
 
-        print(f" - Processing: {chart_name} v{chart_version}")
+        current_time = datetime.datetime.now().strftime('%H:%M:%S')
+        print(f"[{i}/{total_charts}] {current_time} - Processing: {chart_name} v{chart_version}")
 
         # Strategy 1: Download from existing GitHub Pages repo
         if (chart_name, chart_version) in processed_charts:
