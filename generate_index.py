@@ -6,6 +6,10 @@ import subprocess
 import yaml
 import requests
 import datetime
+import http.server
+import socketserver
+import threading
+import functools
 from typing import List, Dict
 
 # --- Configuration ---
@@ -29,7 +33,8 @@ def find_chart_directories(root_path: str) -> List[str]:
                 continue
             chart_dirs.append(dirpath)
     return chart_dirs
-    
+
+
 def get_chart_info(chart_dir: str) -> Dict[str, str] or None:
     """Parses Chart.yaml to get name and version."""
     chart_yaml_path = os.path.join(chart_dir, "Chart.yaml")
@@ -41,6 +46,7 @@ def get_chart_info(chart_dir: str) -> Dict[str, str] or None:
         print(f"Error reading or parsing {chart_yaml_path}: {e}")
         return None
 
+
 def validate_index(package_dir: str):
     """
     Uses the helm binary to validate the generated index.yaml by treating it
@@ -48,25 +54,49 @@ def validate_index(package_dir: str):
     """
     print("\n--- 6. Validating generated index.yaml ---")
     repo_name = "local-validation-repo"
-    repo_path_uri = f"file://{os.path.abspath(package_dir)}"
 
-    # Add the local directory as a temporary Helm repository
-    print(f" - Adding temporary repo '{repo_name}' for validation...")
-    if not run_command(["helm", "repo", "add", repo_name, repo_path_uri]):
-        print("\nFATAL: Failed to add local directory as a Helm repo for validation.")
-        exit(1)
+    # Create a handler that serves files from the specified package directory
+    Handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=package_dir)
+    httpd = socketserver.TCPServer(("", 0), Handler)
 
-    # Try to search the repo. This will fail if the index is malformed.
-    print(" - Searching repo to test index integrity...")
-    if not run_command(["helm", "search", "repo", repo_name], suppress_output=True):
-        print("\nFATAL: Helm failed to read the generated index.yaml. It is likely malformed.")
-        run_command(["helm", "repo", "remove", repo_name], suppress_output=True) # Clean up
-        exit(1)
+    repo_port = httpd.server_address[1]
+    repo_url = f"http://localhost:{repo_port}"
 
-    # Clean up the temporary repository
-    print(" - Validation successful. Removing temporary repo...")
-    run_command(["helm", "repo", "remove", repo_name], suppress_output=True)
-    print(" -> SUCCESS: index.yaml is valid.")
+    # Start the server in a daemon thread so it exits when the main script does
+    server_thread = threading.Thread(target=httpd.serve_forever)
+    server_thread.daemon = True
+    server_thread.start()
+
+    try:
+        print(f" - Started local web server for validation on port {repo_port}...")
+
+        # Add the local directory as a temporary Helm repository
+        print(f" - Adding temporary repo '{repo_name}' for validation...")
+        if not run_command(["helm", "repo", "add", repo_name, repo_url]):
+            print("\nFATAL: Failed to add local directory as a Helm repo for validation.")
+            # TODO: make use of 'finally'
+            httpd.shutdown()
+            httpd.server_close()
+            exit(1)
+
+        # Try to search the repo. This will fail if the index is malformed.
+        print(" - Searching repo to test index integrity...")
+        if not run_command(["helm", "search", "repo", repo_name], suppress_output=True):
+            print("\nFATAL: Helm failed to read the generated index.yaml. It is likely malformed.")
+            # TODO: make use of 'finally'
+            run_command(["helm", "repo", "remove", repo_name], suppress_output=True) # Clean up
+            httpd.shutdown()
+            httpd.server_close()
+            exit(1)
+
+    finally:
+        # Clean up by shutting down the server and removing the temporary repo
+        print(" - Cleaning up...")
+        httpd.shutdown()
+        httpd.server_close()
+        run_command(["helm", "repo", "remove", repo_name], suppress_output=True)
+        print(" -> SUCCESS: index.yaml is valid.")
+
 
 def run_command(command: list, suppress_output: bool = False, suppress_error: bool = False) -> bool:
     """Runs a shell command and returns True on success."""
