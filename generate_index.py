@@ -81,6 +81,12 @@ def post_process_index(index_path: str):
 
         for chart_name, entries in index_data['entries'].items():
             for entry in entries:
+                # Ensure appVersion is always a string to prevent parsing errors.
+                if 'appVersion' in entry and entry['appVersion'] is not None:
+                    if not isinstance(variable, str):
+                        print(f"warning: appVersion {entry['appVersion']} is not a string in {str(entry)}")
+                    entry['appVersion'] = str(entry['appVersion'])
+
                 oci_url = f"oci://quay.io/truecharts/{chart_name}"
                 # Ensure 'urls' key exists and is a list
                 if 'urls' not in entry or not isinstance(entry['urls'], list):
