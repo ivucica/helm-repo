@@ -5,7 +5,12 @@ import os
 import subprocess
 import yaml
 import requests
+import datetime
 from typing import List, Dict
+
+# --- Configuration ---
+# Max number of charts to build from source in a single run to prevent timeouts.
+MAX_SOURCE_BUILDS = 50
 
 def find_chart_directories(root_path: str) -> List[str]:
     """Finds all directories containing a Chart.yaml file."""
@@ -68,23 +73,26 @@ def create_helm_index(repo_path: str, repo_url: str):
     print(f"Chart packages will be placed in: {package_dir}\\n")
 
     # --- Step 1: Fetch existing index from GitHub Pages ---
-    processed_charts = {}
+    existing_index = {}
+    index_path = os.path.join(package_dir, "index.yaml")
     if repo_url:
         index_url = f"{repo_url.rstrip('/')}/index.yaml"
         print(f"--- 1. Fetching existing index from: {index_url} ---")
         try:
             response = requests.get(index_url)
-            response.raise_for_status()
-            remote_index = yaml.safe_load(response.text)
-            if remote_index and 'entries' in remote_index:
-                for chart_name, entries in remote_index.get("entries", {}).items():
-                    for entry_details in entries:
-                        version = entry_details.get("version")
-                        if version:
-                            processed_charts[(chart_name, version)] = entry_details
-                print(f"Found {len(processed_charts)} existing chart versions in the remote index.")
+            if response.status_code == 200:
+                # Save the existing index to be merged later
+                with open(index_path, 'wb') as f:
+                    f.write(response.content)
+                
+                remote_index = yaml.safe_load(response.text)
+                if remote_index and 'entries' in remote_index:
+                    existing_index = remote_index.get("entries", {})
+                print(f"Found {len(existing_index)} unique charts in the remote index.")
+            else:
+                 print("Could not fetch remote index (this is normal on first run). Status code:", response.status_code)
         except requests.exceptions.RequestException as e:
-            print(f"Could not fetch remote index (this is normal on first run): {e}")
+            print(f"Could not fetch remote index: {e}")
         except yaml.YAMLError as e:
             print(f"Could not parse remote index.yaml: {e}")
     else:
@@ -105,22 +113,29 @@ def create_helm_index(repo_path: str, repo_url: str):
 
     # --- Step 3: Process all charts ---
     total_charts = len(all_chart_dirs)
+    source_build_count = 0
     print(f"\n--- 3. Processing {total_charts} total charts ---")
     for i, chart_dir in enumerate(all_chart_dirs, 1):
         info = get_chart_info(chart_dir)
         if not info or not info.get("name") or not info.get("version"):
             print(f" -> Skipping directory {chart_dir} due to missing chart info.")
             continue
-        
+
         chart_name, chart_version = info["name"], info["version"]
+        
+        # If chart version already exists in index, skip all processing.
+        if chart_name in existing_index and any(v.get('version') == chart_version for v in existing_index[chart_name]):
+            continue
+
         package_filename = f"{chart_name}-{chart_version}.tgz"
         package_path = os.path.join(package_dir, package_filename)
 
+        # Also skip if the tarball already exists (e.g., from cache)
         if os.path.exists(package_path):
             continue
 
         current_time = datetime.datetime.now().strftime('%H:%M:%S')
-        print(f"[{i}/{total_charts}] {current_time} - Processing: {chart_name} v{chart_version}")
+        print(f"[{i}/{total_charts}] {current_time} - Processing new chart: {chart_name} v{chart_version}")
 
         # Strategy 1: Download from existing GitHub Pages repo
         if (chart_name, chart_version) in processed_charts:
@@ -150,12 +165,19 @@ def create_helm_index(repo_path: str, repo_url: str):
         else:
             print(f"   - OCI pull failed. Will build from source.")
 
-        # Strategy 3: Build from source
-        print(f"   - Building from source: {chart_dir}")
+        # Strategy 3: Build from source (with a limit)
+        if source_build_count >= MAX_SOURCE_BUILDS:
+            print(f" -> SKIPPING build from source: Build limit of {MAX_SOURCE_BUILDS} reached.")
+            continue
+
+        source_build_count += 1
+        print(f" - Building from source ({source_build_count}/{MAX_SOURCE_BUILDS}): {chart_dir}")
+
         print(f"     - Building dependencies...")
         if not run_command(["helm", "dependency", "build", chart_dir], suppress_output=True, suppress_error=True):
             print(f"   -> FAILED to build dependencies for {chart_name}. Skipping.")
             continue
+
         print(f"     - Packaging chart...")
         if not run_command(["helm", "package", chart_dir, "--destination", package_dir]):
             print(f"   -> FAILED to package {chart_name}. Skipping.")
@@ -165,10 +187,20 @@ def create_helm_index(repo_path: str, repo_url: str):
     # --- Step 4. Generate final index ---
     print(f"\n--- 4. Generating final index.yaml ---")
     print(f"Indexing all packages in '{package_dir}' with URL '{repo_url}'")
-    run_command(["helm", "index", package_dir, "--url", repo_url])
-    print(f"\nSuccessfully generated index.yaml.")
 
-    print("\\n--- Repository Ready ---")
+    merge_arg = ["--merge", index_path] if os.path.exists(index_path) else []
+
+    repo_index_cmd = ["helm", "repo", "index", package_dir, "--url", repo_url] + merge_arg
+    if not run_command(repo_index_cmd):
+        print("\nFATAL: Failed to generate index.yaml. Exiting.")
+        exit(1)
+
+    if not os.path.exists(index_path):
+        print("\nFATAL: index.yaml was not created. Exiting.")
+        exit(1)
+
+    print(f"\nSuccessfully generated index.yaml.")
+    print("\n--- Repository Ready ---")
     print(f"The '{os.path.basename(package_dir)}' directory is ready for deployment.")
     print(f"1. Upload the entire '{os.path.basename(package_dir)}' directory to a web server.")
     print(f"2. The server must make the files available at the URL you provided: {repo_url}")
