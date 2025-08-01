@@ -17,6 +17,11 @@ from typing import List, Dict
 MAX_SOURCE_BUILDS = 50
 # Max number of downloads from OCI that are permitted. (The rest will eventually top up due to --merge.)
 MAX_OCI_PULLS = 800
+# Whether to add OCI link to repo.
+ADD_OCI_LINK = False
+# Whether to remove OCI link from repo.
+REMOVE_OCI_LINK = True
+
 
 def find_chart_directories(root_path: str) -> List[str]:
     """Finds all directories containing a Chart.yaml file."""
@@ -151,10 +156,15 @@ def post_process_index(index_path: str):
                 # Ensure 'urls' key exists and is a list
                 if 'urls' not in entry or not isinstance(entry['urls'], list):
                     entry['urls'] = []
-                
-                # Add OCI URL if it's not already there
-                if oci_url not in entry['urls']:
-                    entry['urls'].insert(0, oci_url) # Prioritize OCI URL
+
+		global ADD_OCI_URL, REMOVE_OCI_URL
+		if ADD_OCI_URL:
+                    # Add OCI URL if it's not already there
+                    if oci_url not in entry['urls']:
+                        entry['urls'].insert(0, oci_url) # Prioritize OCI URL
+                if REMOVE_OCI_URL:
+                    if oci_url in entry['urls']:
+                        entry['urls'].remove(oci_url)
 
         with open(index_path, 'w', encoding='utf-8') as f:
             yaml.dump(index_data, f, default_flow_style=False)
