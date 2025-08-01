@@ -232,12 +232,23 @@ def create_helm_index(repo_path: str, repo_url: str):
     print(f"\n--- 4. Generating final index.yaml ---")
     print(f"Indexing all packages in '{package_dir}' with URL '{repo_url}'")
 
-    merge_arg = ["--merge", index_path] if os.path.exists(index_path) else []
-
-    repo_index_cmd = ["helm", "repo", "index", package_dir, "--url", repo_url] + merge_arg
-    if not run_command(repo_index_cmd):
-        print("\nFATAL: Failed to generate index.yaml. Exiting.")
-        exit(1)
+    # First, attempt to merge with the existing index.
+    if os.path.exists(index_path):
+        print(" - Attempting to merge with existing index.yaml...")
+        merge_cmd = ["helm", "repo", "index", package_dir, "--url", repo_url, "--merge", index_path]
+        if not run_command(merge_cmd):
+            print(" -> WARNING: Merge failed, likely due to a malformed remote index. Retrying without merge...")
+            # If merge fails, generate a new index from scratch.
+            index_cmd = ["helm", "repo", "index", package_dir, "--url", repo_url]
+            if not run_command(index_cmd):
+                print("\nFATAL: Failed to generate index.yaml even without merging. Exiting.")
+                exit(1)
+    else:
+        # If no index exists, create a new one.
+        index_cmd = ["helm", "repo", "index", package_dir, "--url", repo_url]
+        if not run_command(index_cmd):
+            print("\nFATAL: Failed to generate a new index.yaml. Exiting.")
+            exit(1)
 
     if not os.path.exists(index_path):
         print("\nFATAL: index.yaml was not created. Exiting.")
