@@ -106,6 +106,7 @@ def post_process_index(index_path: str):
             index_data = yaml.safe_load(f)
 
         if not index_data or 'entries' not in index_data:
+            print(f"Skipping postprocessing: {index_path} has no contents, or there is no key 'entries' in contents")
             return  # TODO: we skip processing, but we might submit empty yaml. do we want that?
 
         for chart_name, entries in index_data['entries'].items():
