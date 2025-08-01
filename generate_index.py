@@ -39,6 +39,33 @@ def get_chart_info(chart_dir: str) -> Dict[str, str] or None:
         print(f"Error reading or parsing {chart_yaml_path}: {e}")
         return None
 
+def validate_index(package_dir: str):
+    """
+    Uses the helm binary to validate the generated index.yaml by treating it
+    as a local repository. This ensures it is not malformed.
+    """
+    print("\n--- 6. Validating generated index.yaml ---")
+    repo_name = "local-validation-repo"
+    repo_path_uri = f"file://{os.path.abspath(package_dir)}"
+
+    # Add the local directory as a temporary Helm repository
+    print(f" - Adding temporary repo '{repo_name}' for validation...")
+    if not run_command(["helm", "repo", "add", repo_name, repo_path_uri]):
+        print("\nFATAL: Failed to add local directory as a Helm repo for validation.")
+        exit(1)
+
+    # Try to search the repo. This will fail if the index is malformed.
+    print(" - Searching repo to test index integrity...")
+    if not run_command(["helm", "search", "repo", repo_name], suppress_output=True):
+        print("\nFATAL: Helm failed to read the generated index.yaml. It is likely malformed.")
+        run_command(["helm", "repo", "remove", repo_name], suppress_output=True) # Clean up
+        exit(1)
+
+    # Clean up the temporary repository
+    print(" - Validation successful. Removing temporary repo...")
+    run_command(["helm", "repo", "remove", repo_name], suppress_output=True)
+    print(" -> SUCCESS: index.yaml is valid.")
+
 def run_command(command: list, suppress_output: bool = False, suppress_error: bool = False) -> bool:
     """Runs a shell command and returns True on success."""
     try:
@@ -257,6 +284,7 @@ def create_helm_index(repo_path: str, repo_url: str):
     print(f"\nSuccessfully generated index.yaml.")
 
     post_process_index(index_path)
+    validate_index(package_dir)
 
     print("\n--- Repository Ready ---")
     print(f"The '{os.path.basename(package_dir)}' directory is ready for deployment.")
