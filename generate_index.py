@@ -138,7 +138,8 @@ def create_helm_index(repo_path: str, repo_url: str):
         print(f"[{i}/{total_charts}] {current_time} - Processing new chart: {chart_name} v{chart_version}")
 
         # Strategy 1: Download from existing GitHub Pages repo
-        if (chart_name, chart_version) in processed_charts:
+        #if (chart_name, chart_version) in processed_charts:
+        if False:  # If it is already in the index, we would be skipping this completely. We may want to revisit this in the future, but for now let's just fetch from OCI.
             entry = processed_charts[(chart_name, chart_version)]
             if entry.get("urls") and entry["urls"][0]:
                 chart_url = f"{repo_url.rstrip('/')}/{entry['urls'][0]}"
