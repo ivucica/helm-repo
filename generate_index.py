@@ -106,6 +106,6 @@ if __name__ == "__main__":
     # The local path to the cloned repository.
     # This script assumes it is located in the root of the repository.
     #REPO_LOCAL_PATH = "."
-    REPO_LOCAL_POATH = os.getenv("REPO_LOCAL_PATH", ".")
+    REPO_LOCAL_PATH = os.getenv("REPO_LOCAL_PATH", ".")
     
     create_helm_index(REPO_LOCAL_PATH, REPO_HOST_URL)
