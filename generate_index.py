@@ -16,7 +16,7 @@ from typing import List, Dict
 # Max number of charts to build from source in a single run to prevent timeouts.
 MAX_SOURCE_BUILDS = 50
 # Max number of downloads from OCI that are permitted. (The rest will eventually top up due to --merge.)
-MAX_OCI_PULLS = 800
+MAX_OCI_PULLS = 50
 # Whether to add OCI link to repo.
 ADD_OCI_LINK = False
 # Whether to remove OCI link from repo.
