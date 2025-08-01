@@ -96,13 +96,14 @@ def validate_index(package_dir: str):
             httpd.server_close()
             exit(1)
 
+        print(" -> SUCCESS: index.yaml is valid.")
+
     finally:
         # Clean up by shutting down the server and removing the temporary repo
         print(" - Cleaning up...")
         httpd.shutdown()
         httpd.server_close()
         run_command(["helm", "repo", "remove", repo_name], suppress_output=True)
-        print(" -> SUCCESS: index.yaml is valid.")
 
 
 def run_command(command: list, suppress_output: bool = False, suppress_error: bool = False) -> bool:
