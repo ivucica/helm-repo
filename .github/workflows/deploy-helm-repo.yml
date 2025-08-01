@@ -2,8 +2,12 @@ name: Build and Deploy Helm Repo Daily
 
 on:
   # Runs every day at midnight UTC, similar to the TrueCharts daily task.
-  schedule:
-    - cron: "0 0 * * *"
+  #Disabled intentionally until it can be optimized. 788+ charts take way too long to generate, only
+  #those that are different should be updated. Fetching the current index.yaml may be a way out of
+  #it, running locally, running concurrently (see .github/scripts/cr.sh), or maybe even fetching
+  #the built version from oci://quay.io/truecharts and just indexing it could do the trick.
+  #schedule:
+  #  - cron: "0 0 * * *"
   # Allows you to run this workflow manually from the Actions tab.
   workflow_dispatch:
 
