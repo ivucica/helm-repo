@@ -198,7 +198,7 @@ def create_helm_index(repo_path: str, repo_url: str):
                 # Save the existing index to be merged later
                 with open(index_path, 'wb') as f:
                     f.write(response.content)
-                
+
                 remote_index_text = response.content.decode('utf-8', errors='ignore')
                 remote_index = yaml.safe_load(remote_index_text)
 
@@ -238,26 +238,31 @@ def create_helm_index(repo_path: str, repo_url: str):
             print(f" -> Skipping directory {chart_dir} due to missing chart info.")
             continue
 
+        current_time = datetime.datetime.now().strftime('%H:%M:%S')
         chart_name, chart_version = info["name"], info["version"]
-        
-        # If chart version already exists in index, skip all processing.
-        if chart_name in existing_index and any(v.get('version') == chart_version for v in existing_index[chart_name]):
-            continue
 
         package_filename = f"{chart_name}-{chart_version}.tgz"
         package_path = os.path.join(package_dir, package_filename)
 
         # Also skip if the tarball already exists (e.g., from cache)
         if os.path.exists(package_path):
+            print(f"[{i}/{total_charts}] {current_time} - Found chart tarball for: {chart_name} v{chart_version}: {package_path}")
             continue
 
-        current_time = datetime.datetime.now().strftime('%H:%M:%S')
-        print(f"[{i}/{total_charts}] {current_time} - Processing new chart: {chart_name} v{chart_version}")
+        # If chart version already exists in index, remember, we may want to skip processing.
+        chart_in_index = False
+        newness = "new"
+        entry = None
+        if chart_name in existing_index and any(v.get('version') == chart_version for v in existing_index[chart_name]):
+            chart_in_index = True
+            newness = "existing"
+            entry = list(v for v in existing_index[chart_name] if v.get('version') == chart_version)[0]  # cannot use 'info' since that does not have attr 'urls'
+
+        print(f"[{i}/{total_charts}] {current_time} - Processing {newness} chart: {chart_name} v{chart_version}")
 
         # Strategy 1: Download from existing GitHub Pages repo
         #if (chart_name, chart_version) in processed_charts:
-        if False:  # If it is already in the index, we would be skipping this completely. We may want to revisit this in the future, but for now let's just fetch from OCI.
-            entry = processed_charts[(chart_name, chart_version)]
+        if entry:
             if entry.get("urls") and entry["urls"][0]:
                 chart_url = f"{repo_url.rstrip('/')}/{entry['urls'][0]}"
                 print(f"   - Found in remote index. Downloading from {chart_url}...")
@@ -279,7 +284,7 @@ def create_helm_index(repo_path: str, repo_url: str):
             print(f"    (Also skips build from source)")
             # We could likely break here too, but eh. Let's print out the names of remaining ones, or use tarballs we do have.
             continue
-        
+
         oci_pull_count += 1
         if run_command(oci_pull_command, suppress_error=True, suppress_output=True):
             print(f"   -> SUCCESS: Pulled from OCI.")
