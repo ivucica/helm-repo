@@ -62,6 +62,41 @@ def run_command(command: list, suppress_output: bool = False, suppress_error: bo
             print(f"Stderr: {e.stderr}")
         return False
 
+def post_process_index(index_path: str):
+    """
+    Opens the generated index.yaml, ensures it's clean UTF-8, and adds
+    an OCI URL to each chart's 'urls' array if not already present.
+    """
+    print("\n--- 5. Post-processing index.yaml ---")
+    if not os.path.exists(index_path):
+        print(f"Warning: {index_path} not found. Skipping post-processing.")
+        return
+
+    try:
+        with open(index_path, 'r', encoding='utf-8', errors='ignore') as f:
+            index_data = yaml.safe_load(f)
+
+        if not index_data or 'entries' not in index_data:
+            return  # TODO: we skip processing, but we might submit empty yaml. do we want that?
+
+        for chart_name, entries in index_data['entries'].items():
+            for entry in entries:
+                oci_url = f"oci://quay.io/truecharts/{chart_name}"
+                # Ensure 'urls' key exists and is a list
+                if 'urls' not in entry or not isinstance(entry['urls'], list):
+                    entry['urls'] = []
+                
+                # Add OCI URL if it's not already there
+                if oci_url not in entry['urls']:
+                    entry['urls'].insert(0, oci_url) # Prioritize OCI URL
+
+        with open(index_path, 'w', encoding='utf-8') as f:
+            yaml.dump(index_data, f, default_flow_style=False)
+        print(" -> SUCCESS: Post-processing complete. OCI URLs verified.")
+
+    except (IOError, yaml.YAMLError) as e:
+        print(f" -> FAILED to post-process index.yaml: {e}")
+
 def create_helm_index(repo_path: str, repo_url: str):
     """
     Creates a Helm repository index.yaml file by finding, packaging,
@@ -87,6 +122,7 @@ def create_helm_index(repo_path: str, repo_url: str):
                 
                 remote_index_text = response.content.decode('utf-8', errors='ignore')
                 remote_index = yaml.safe_load(remote_index_text)
+
                 if remote_index and 'entries' in remote_index:
                     existing_index = remote_index.get("entries", {})
                 print(f"Found {len(existing_index)} unique charts in the remote index.")
@@ -202,6 +238,9 @@ def create_helm_index(repo_path: str, repo_url: str):
         exit(1)
 
     print(f"\nSuccessfully generated index.yaml.")
+
+    post_process_index(index_path)
+
     print("\n--- Repository Ready ---")
     print(f"The '{os.path.basename(package_dir)}' directory is ready for deployment.")
     print(f"1. Upload the entire '{os.path.basename(package_dir)}' directory to a web server.")
