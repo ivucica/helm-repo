@@ -18,9 +18,9 @@ MAX_SOURCE_BUILDS = 50
 # Max number of downloads from OCI that are permitted. (The rest will eventually top up due to --merge.)
 MAX_OCI_PULLS = 50
 # Whether to add OCI link to repo.
-ADD_OCI_LINK = False
+ADD_OCI_URL = False
 # Whether to remove OCI link from repo.
-REMOVE_OCI_LINK = True
+REMOVE_OCI_URL = True
 
 
 def find_chart_directories(root_path: str) -> List[str]:
