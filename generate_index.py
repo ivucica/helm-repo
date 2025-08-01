@@ -160,8 +160,8 @@ def post_process_index(index_path: str):
                 if 'urls' not in entry or not isinstance(entry['urls'], list):
                     entry['urls'] = []
 
-		global ADD_OCI_URL, REMOVE_OCI_URL
-		if ADD_OCI_URL:
+                global ADD_OCI_URL, REMOVE_OCI_URL
+                if ADD_OCI_URL:
                     # Add OCI URL if it's not already there
                     if oci_url not in entry['urls']:
                         entry['urls'].insert(0, oci_url) # Prioritize OCI URL
