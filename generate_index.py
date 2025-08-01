@@ -113,7 +113,7 @@ def post_process_index(index_path: str):
             for entry in entries:
                 # Ensure appVersion is always a string to prevent parsing errors.
                 if 'appVersion' in entry and entry['appVersion'] is not None:
-                    if not isinstance(variable, str):
+                    if not isinstance(entry['appVersion'], str):
                         print(f"warning: appVersion {entry['appVersion']} is not a string in {str(entry)}")
                     entry['appVersion'] = str(entry['appVersion'])
 
